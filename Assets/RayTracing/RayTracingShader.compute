@@ -29,6 +29,21 @@ Ray CreateCameraRay(float2 uv) {
     return CreateRay(origin, direction);
 }
 
+bool hitSphere(float3 center, float radius, Ray r){
+    float3 oc = r.origin - center;
+    float a = dot(r.direction,r.direction);
+    float b = 2.0 * dot(oc,r.direction);
+    float c = dot(oc,oc) - radius*radius;
+    float discriminant = b*b - 4*a*c;
+    return discriminant > 0;
+}
+
+float4 RayColor(Ray ray){
+    if(hitSphere(float3(0,0,-1),0.5,ray)) return float4(1,0,0,0);
+    float t = 0.5 * (ray.direction.y + 1.0);
+    return lerp(float4(1.0,1.0,1.0,1.0),float4(0.5,0.7,1.0,1.0),t);
+}
+
 [numthreads(8,8,1)]
 void CSMain (uint3 id : SV_DispatchThreadID) {
     uint width, height;
@@ -38,5 +53,5 @@ void CSMain (uint3 id : SV_DispatchThreadID) {
 
     Ray ray = CreateCameraRay(uv);
 
-    Result[id.xy] = float4(ray.direction * 0.5f + 0.5f, 1.0f);
+    Result[id.xy] = RayColor(ray);
 }
