@@ -4,6 +4,9 @@ RWTexture2D<float4> Result;
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
 
+StructuredBuffer<float2> offsets;
+float offsetLength;
+
 const float pi = 3.141592653589793238462;
 
 float DegToRad(float deg){
@@ -104,9 +107,12 @@ void CSMain (uint3 id : SV_DispatchThreadID) {
     uint width, height;
     Result.GetDimensions(width, height);
 
-    float2 uv = float2((id.xy + float2(0.5f, 0.5f)) / float2(width, height) * 2.0f - 1.0f);
-
-    Ray ray = CreateCameraRay(uv);
-
-    Result[id.xy] = RayColor(ray);
+    float4 col = float4(0.0,0.0,0.0,0.0);
+    for(int i = 0; i < offsetLength;i++){
+        float2 uv = float2((id.xy + offsets[i]) / float2(width, height) * 2.0f - 1.0f);
+        Ray ray = CreateCameraRay(uv);
+        col += RayColor(ray);
+    }
+    col = col / offsetLength;
+    Result[id.xy] = col;
 }

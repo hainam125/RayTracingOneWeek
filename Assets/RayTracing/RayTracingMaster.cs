@@ -28,7 +28,12 @@ public class RayTracingMaster : MonoBehaviour {
         rayTracingShader.SetTexture(0, "Result", target);
         int threadGroupsX = Mathf.CeilToInt(Screen.width / 8f);
         int threadGroupsY = Mathf.CeilToInt(Screen.height / 8f);
+
+        var offsetBuffer = SeupOffsetBuffer();
+
         rayTracingShader.Dispatch(0, threadGroupsX, threadGroupsY, 1);
+
+        offsetBuffer.Dispose();
 
         Graphics.Blit(target, destination);
     }
@@ -42,5 +47,24 @@ public class RayTracingMaster : MonoBehaviour {
             target.enableRandomWrite = true;
             target.Create();
         }
+    }
+
+    private ComputeBuffer SeupOffsetBuffer() {
+        var size = 5;
+        var offsets = new Vector2[size * size];
+        var idx = 0;
+        for (float x = 0; x < size; x++) {
+            for (float y = 0; y < size; y++) {
+                offsets[idx] = new Vector2(x / size, y / size);
+                idx++;
+            }
+        }
+        var offsetBuffer = new ComputeBuffer(offsets.Length, 2 * 4);
+        offsetBuffer.SetData(offsets);
+
+        rayTracingShader.SetBuffer(0, "offsets", offsetBuffer);
+        rayTracingShader.SetFloat("offsetLength", offsets.Length);
+
+        return offsetBuffer;
     }
 }
