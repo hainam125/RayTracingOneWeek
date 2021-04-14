@@ -36,14 +36,14 @@ Ray CreateCameraRay(float2 uv) {
 float hitSphere(float3 center, float radius, Ray ray){
     float3 oc = ray.origin - center;
     float a = dot(ray.direction,ray.direction);
-    float b = 2.0 * dot(oc,ray.direction);
+    float half_b = dot(oc,ray.direction);
     float c = dot(oc,oc) - radius*radius;
-    float discriminant = b*b - 4*a*c;
+    float discriminant = half_b*half_b - a*c;
     if(discriminant < 0){
         return -1.0;
     }
     else {
-        return (-b-sqrt(discriminant))/(2.0*a);
+        return (-half_b-sqrt(discriminant))/a;
     }
 }
 
