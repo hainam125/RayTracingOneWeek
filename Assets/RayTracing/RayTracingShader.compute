@@ -84,11 +84,12 @@ Ray CreateCameraRay(float2 uv) {
 
 struct Material {
     int type;//0-lambertian;1-metal
-    float3 albedo;
+    float4 albedo;//albedo + fuzz
 };
 
-Material CreateMat(int type, float3 albedo){
+Material CreateMat(int type, float4 albedo){
     Material mat;
+    albedo.w  = albedo.w < 1 ? albedo.w : 1;
     mat.type = type;
     mat.albedo = albedo;
     return mat;
@@ -117,8 +118,9 @@ bool LambertianScatter(Material mat, Ray rayIn, HitRecord hit, inout float3 atte
 
 bool MetalScatter(Material mat, Ray rayIn, HitRecord hit, inout float3 attenuation, inout Ray rayScattered){
     float3 reflected = reflect(rayIn.direction, hit.normal);
-    rayScattered = CreateRay(hit.p, reflected);
-    attenuation = mat.albedo;
+    float fuzz = mat.albedo.w;
+    rayScattered = CreateRay(hit.p, reflected + fuzz * RandInUnitSphere(rayIn.direction));
+    attenuation = mat.albedo.rgb;
     return dot(rayScattered.direction, hit.normal) > 0;
 }
 
@@ -150,10 +152,10 @@ bool SphereHit(float3 center, float radius, Material mat, Ray ray, float tMin, f
 
 
 float3 RayColor(Ray ray, int depth){
-    Material matGround = CreateMat(0, float3(0.8,0.8,0.0));
-    Material matCenter = CreateMat(0, float3(0.7,0.3,0.3));
-    Material matLeft = CreateMat(1, float3(0.8,0.8,0.8));
-    Material matRight = CreateMat(1, float3(0.8,0.6,0.2));
+    Material matGround = CreateMat(0, float4(0.8,0.8,0.0,0.0));
+    Material matCenter = CreateMat(0, float4(0.7,0.3,0.3,0.0));
+    Material matLeft = CreateMat(1, float4(0.8,0.8,0.8,0.3));
+    Material matRight = CreateMat(1, float4(0.8,0.6,0.2,1.0));
 
     float3 col = float3(0,0,0);
     float3 multiplier = float3(1.0,1.0,1.0);
