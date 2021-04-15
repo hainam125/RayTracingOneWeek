@@ -7,6 +7,7 @@ public class RayTracingMaster : MonoBehaviour {
 
     private RenderTexture target;
     private new Camera camera;
+    private Vector3[] randoms;
 
     private void Awake() {
         camera = GetComponent<Camera>();

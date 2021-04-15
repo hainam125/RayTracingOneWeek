@@ -13,6 +13,41 @@ float DegToRad(float deg){
     return deg * pi / 180.0;
 }
 
+//https://www.shadertoy.com/view/4djSRW
+float HashOld33(float3 p ) {
+	p = float3( dot(p,float3(127.1,311.7, 74.7)),
+			  dot(p,float3(269.5,183.3,246.1)),
+			  dot(p,float3(113.5,271.9,124.6)));
+
+	return frac(sin(p)*43758.5453123);
+}
+
+float MinMax(float value, float min, float max) {
+    return min + (max - min) * value;
+}
+
+float3 Rand3(float3 seed, float min, float max){
+    float r1 = HashOld33(seed.xyz);
+    float r2 = HashOld33(seed.yxx);
+    float r3 = HashOld33(seed.zzx);
+    return float3(MinMax(r1, min, max),MinMax(r2, min, max),MinMax(r3, min, max));
+}
+
+float3 RandInUnitSphere(float3 seed){
+    while(true){
+        float3 p = Rand3(seed, -1.0, 1.0);
+        if(dot(p,p) >= 1.0) continue;
+        return p;
+    }
+    return float3(0,0,0);
+}
+
+float3 RandInHemiSphere(float3 seed, float3 normal){
+    float3 inUnitSphere = RandInUnitSphere(seed);
+    if(dot(inUnitSphere,normal) > 0.0) return inUnitSphere;
+    return -inUnitSphere;
+}
+
 struct Ray {
     float3 origin;
     float3 direction;
@@ -80,26 +115,39 @@ bool SphereHit(float3 center, float radius, Ray ray, float tMin, float tMax, ino
 }
 
 
-float4 RayColor(Ray ray){
-    HitRecord hit;
-    bool hitAnything = false;
-    float tMin = 0;
-    float closestSoFar = 1.#INF;
+float4 RayColor(Ray ray, int depth){
+    float4 col = float4(0,0,0,0);
+    float multiplier = 1.0;
+    while(depth > 0){
+        HitRecord hit;
+        bool hitAnything = false;
+        float tMin = 0.001;
+        float closestSoFar = 1.#INF;
 
-    if(SphereHit(float3(0,0,-1), 0.5, ray, tMin, closestSoFar, hit)){
-        hitAnything = true;
-        closestSoFar = hit.t;
-    }
-    if(SphereHit(float3(0,-100.5,-1), 100, ray, tMin, closestSoFar, hit)){
-        hitAnything = true;
-        closestSoFar = hit.t;
-    }
+        if(SphereHit(float3(0,0,-1), 0.5, ray, tMin, closestSoFar, hit)){
+            hitAnything = true;
+            closestSoFar = hit.t;
+        }
+        if(SphereHit(float3(0,-100.5,-1), 100, ray, tMin, closestSoFar, hit)){
+            hitAnything = true;
+            closestSoFar = hit.t;
+        }
 
-    if(hitAnything) {
-        return float4(0.5 * (hit.normal + 1.0), 1.0);
+        if(hitAnything) {
+            //float3 target = hit.p + hit.normal + RandInUnitSphere(ray.direction);
+            //float3 target = hit.p + normalize(hit.normal + RandInUnitSphere(ray.direction));
+            float3 target = hit.p + RandInHemiSphere(ray.direction, hit.normal);
+            ray = CreateRay(hit.p, normalize(target - hit.p));
+            multiplier *= 0.5;
+            depth--;
+            continue;
+        }
+    
+        float t = 0.5 * (ray.direction.y + 1.0);
+        col += multiplier * lerp(float4(1.0,1.0,1.0,1.0), float4(0.5,0.7,1.0,1.0), t);
+        break;
     }
-    float t = 0.5 * (ray.direction.y + 1.0);
-    return lerp(float4(1.0,1.0,1.0,1.0), float4(0.5,0.7,1.0,1.0), t);
+    return col;
 }
 
 [numthreads(8,8,1)]
@@ -111,7 +159,7 @@ void CSMain (uint3 id : SV_DispatchThreadID) {
     for(int i = 0; i < offsetLength;i++){
         float2 uv = float2((id.xy + offsets[i]) / float2(width, height) * 2.0f - 1.0f);
         Ray ray = CreateCameraRay(uv);
-        col += RayColor(ray);
+        col += RayColor(ray,10);
     }
     col = col / offsetLength;
     Result[id.xy] = col;
