@@ -13,6 +13,11 @@ float DegToRad(float deg){
     return deg * pi / 180.0;
 }
 
+bool NearZero(float3 v){
+    const float s = 1e-8;
+    return abs(v.x) < s && abs(v.y) < s && abs(v.z) < s;
+}
+
 //https://www.shadertoy.com/view/4djSRW
 float HashOld33(float3 p ) {
 	p = float3( dot(p,float3(127.1,311.7, 74.7)),
@@ -77,11 +82,24 @@ Ray CreateCameraRay(float2 uv) {
     return CreateRay(origin, direction);
 }
 
+struct Material {
+    int type;//0-lambertian;1-metal
+    float3 albedo;
+};
+
+Material CreateMat(int type, float3 albedo){
+    Material mat;
+    mat.type = type;
+    mat.albedo = albedo;
+    return mat;
+}
+
 struct HitRecord {
     float3 p;
     float3 normal;
     float t;
     bool frontFace;
+    Material mat;
 };
 
 void SetFaceNormal(Ray ray, float3 outwardNormal, inout HitRecord hit){
@@ -89,7 +107,22 @@ void SetFaceNormal(Ray ray, float3 outwardNormal, inout HitRecord hit){
     hit.normal = hit.frontFace ? outwardNormal : -outwardNormal;
 }
 
-bool SphereHit(float3 center, float radius, Ray ray, float tMin, float tMax, inout HitRecord hit){
+bool LambertianScatter(Material mat, Ray rayIn, HitRecord hit, inout float3 attenuation, inout Ray rayScattered){
+    float3 scatterDirection = hit.normal + RandInUnitSphere(rayIn.direction);
+    if(NearZero(scatterDirection)) scatterDirection = hit.normal;
+    rayScattered = CreateRay(hit.p, scatterDirection);
+    attenuation = mat.albedo;
+    return true; 
+}
+
+bool MetalScatter(Material mat, Ray rayIn, HitRecord hit, inout float3 attenuation, inout Ray rayScattered){
+    float3 reflected = reflect(rayIn.direction, hit.normal);
+    rayScattered = CreateRay(hit.p, reflected);
+    attenuation = mat.albedo;
+    return dot(rayScattered.direction, hit.normal) > 0;
+}
+
+bool SphereHit(float3 center, float radius, Material mat, Ray ray, float tMin, float tMax, inout HitRecord hit){
     float3 oc = ray.origin - center;
     float a = dot(ray.direction,ray.direction);
     float half_b = dot(oc,ray.direction);
@@ -109,42 +142,71 @@ bool SphereHit(float3 center, float radius, Ray ray, float tMin, float tMax, ino
     hit.t = root;
     hit.p = RayAt(ray, hit.t);
     float3 outwardNormal = (hit.p - center) / radius;
+    hit.mat = mat;
     SetFaceNormal(ray, outwardNormal, hit);
 
     return true;
 }
 
 
-float4 RayColor(Ray ray, int depth){
-    float4 col = float4(0,0,0,0);
-    float multiplier = 1.0;
+float3 RayColor(Ray ray, int depth){
+    Material matGround = CreateMat(0, float3(0.8,0.8,0.0));
+    Material matCenter = CreateMat(0, float3(0.7,0.3,0.3));
+    Material matLeft = CreateMat(1, float3(0.8,0.8,0.8));
+    Material matRight = CreateMat(1, float3(0.8,0.6,0.2));
+
+    float3 col = float3(0,0,0);
+    float3 multiplier = float3(1.0,1.0,1.0);
+
     while(depth > 0){
         HitRecord hit;
         bool hitAnything = false;
         float tMin = 0.001;
         float closestSoFar = 1.#INF;
 
-        if(SphereHit(float3(0,0,-1), 0.5, ray, tMin, closestSoFar, hit)){
+        if(SphereHit(float3(0,-100.5,-1), 100, matGround, ray, tMin, closestSoFar, hit)){
             hitAnything = true;
             closestSoFar = hit.t;
         }
-        if(SphereHit(float3(0,-100.5,-1), 100, ray, tMin, closestSoFar, hit)){
+        if(SphereHit(float3(0,0,-1), 0.5, matCenter, ray, tMin, closestSoFar, hit)){
+            hitAnything = true;
+            closestSoFar = hit.t;
+        }
+        if(SphereHit(float3(-1,0,-1), 0.5, matLeft, ray, tMin, closestSoFar, hit)){
+            hitAnything = true;
+            closestSoFar = hit.t;
+        }
+        if(SphereHit(float3(1,0,-1), 0.5, matRight, ray, tMin, closestSoFar, hit)){
             hitAnything = true;
             closestSoFar = hit.t;
         }
 
         if(hitAnything) {
-            //float3 target = hit.p + hit.normal + RandInUnitSphere(ray.direction);
-            //float3 target = hit.p + normalize(hit.normal + RandInUnitSphere(ray.direction));
-            float3 target = hit.p + RandInHemiSphere(ray.direction, hit.normal);
-            ray = CreateRay(hit.p, normalize(target - hit.p));
-            multiplier *= 0.5;
-            depth--;
+            Ray scatteredRay;
+            float3 attenuation;
+            bool isScattered = false;
+
+            if(hit.mat.type==0){
+                isScattered = LambertianScatter(hit.mat, ray, hit, attenuation, scatteredRay);
+            }
+            else if(hit.mat.type==1){
+                isScattered = MetalScatter(hit.mat, ray, hit, attenuation, scatteredRay);
+            }
+
+            if(isScattered){
+                multiplier*=attenuation;
+                ray = scatteredRay;
+                depth--;
+            }
+            else {
+                depth = 0;
+            }
+
             continue;
         }
     
         float t = 0.5 * (ray.direction.y + 1.0);
-        col += multiplier * lerp(float4(1.0,1.0,1.0,1.0), float4(0.5,0.7,1.0,1.0), t);
+        col += multiplier * lerp(float3(1.0,1.0,1.0), float3(0.5,0.7,1.0), t);
         break;
     }
     return col;
@@ -155,12 +217,12 @@ void CSMain (uint3 id : SV_DispatchThreadID) {
     uint width, height;
     Result.GetDimensions(width, height);
 
-    float4 col = float4(0.0,0.0,0.0,0.0);
+    float3 col = float3(0.0,0.0,0.0);
     for(int i = 0; i < offsetLength;i++){
         float2 uv = float2((id.xy + offsets[i]) / float2(width, height) * 2.0f - 1.0f);
         Ray ray = CreateCameraRay(uv);
         col += RayColor(ray,10);
     }
     col = col / offsetLength;
-    Result[id.xy] = col;
+    Result[id.xy] = float4(col,1.0);
 }
