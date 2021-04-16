@@ -118,8 +118,18 @@ float3 Refract (float3 uv, float3 n, float etaiOverEtat){
 bool DielectricScatter(Material mat, Ray rayIn, HitRecord hit, inout float3 attenuation, inout Ray rayScattered){
     attenuation = float3(1.0,1.0,1.0);
     float refractionRatio = hit.frontFace ? (1.0 / mat.albedo.w) : mat.albedo.w;
-    float3 refracted = Refract(rayIn.direction, hit.normal, refractionRatio);
-    rayScattered = CreateRay(hit.p, normalize(refracted));
+
+    float3 unitDir = normalize(rayIn.direction);
+    float cosTheta = min(dot(-unitDir, hit.normal),1.0);
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    bool cannotRefract = refractionRatio * sinTheta > 1.0;
+    float3 direction;
+
+    if(cannotRefract) direction = reflect(unitDir, hit.normal);
+    else direction = Refract(rayIn.direction, hit.normal, refractionRatio);
+
+    rayScattered = CreateRay(hit.p, direction);
     return true; 
 }
 
