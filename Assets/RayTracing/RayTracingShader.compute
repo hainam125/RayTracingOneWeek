@@ -108,6 +108,12 @@ void SetFaceNormal(Ray ray, float3 outwardNormal, inout HitRecord hit){
     hit.normal = hit.frontFace ? outwardNormal : -outwardNormal;
 }
 
+float Reflectance(float cosine, float refIdx){
+    float r0 = (1.0 - refIdx) /  (1.0 + refIdx);
+    r0 = r0 * r0;
+    return r0 + (1 - r0) * pow(1.0 - cosine, 5.0);
+}
+
 float3 Refract (float3 uv, float3 n, float etaiOverEtat){
     float cosTheta = min(dot(-uv,n),1.0);
     float3 rOutPerp = etaiOverEtat * (uv + cosTheta * n);
@@ -126,7 +132,7 @@ bool DielectricScatter(Material mat, Ray rayIn, HitRecord hit, inout float3 atte
     bool cannotRefract = refractionRatio * sinTheta > 1.0;
     float3 direction;
 
-    if(cannotRefract) direction = reflect(unitDir, hit.normal);
+    if(cannotRefract || Reflectance(cosTheta, refractionRatio) > HashOld33(rayIn.direction)) direction = reflect(unitDir, hit.normal);
     else direction = Refract(rayIn.direction, hit.normal, refractionRatio);
 
     rayScattered = CreateRay(hit.p, direction);
