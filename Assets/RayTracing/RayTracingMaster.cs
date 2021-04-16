@@ -51,7 +51,7 @@ public class RayTracingMaster : MonoBehaviour {
     }
 
     private ComputeBuffer SeupOffsetBuffer() {
-        var size = 5;
+        var size = 10;
         var offsets = new Vector2[size * size];
         var idx = 0;
         for (float x = 0; x < size; x++) {
